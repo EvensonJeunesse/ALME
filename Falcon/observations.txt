@@ -1,0 +1,7 @@
+Il semblerait que -90dBm soit la valeur minimale (puissance minimale) pour lequel je peux détecter et intercepter des probes request et des beacons
+
+Pour des appareils juste à côté en avoisine les -40 dBm
+
+Il faudrait étudier la distribution des puissances en fonction de la vrai distance pour déterminer une approximation de l'évolution de la puissance en fonction de la distance .
+
+Les appareils semblent parfois changer de channel. Je pense que ils envoient des probes request dans différents channels.
