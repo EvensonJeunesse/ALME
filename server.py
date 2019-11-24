@@ -31,7 +31,7 @@ class ClientThread(threading.Thread):
                     print("sending data back to the client")
                     self.clientsocket.sendall(data)
                 else:
-                    print("None more data")
+                    print("No more data")
                     break
         finally:
             # Clean up the connection
