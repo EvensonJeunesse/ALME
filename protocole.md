@@ -1,6 +1,7 @@
 séparateur de champs : ;
 affectation -> : 
 nom_du_champ:valeur;nom_du_champ:valeur;nom_du_champ:valeur;nom_du_champ:valeur;
+fin d'une requête &
 
 syntaxe : en s'en fiche des retours à la ligne et des doubles espaces
 
