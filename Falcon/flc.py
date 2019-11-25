@@ -122,7 +122,7 @@ def hopper(iface): #sniffing network channels
 def finder(pckt):
     findProbesReq(pckt)
     findBeacons(pckt)
-    F.generateUI()
+    #F.generateUI()
 
 
 def findBeacons(pckt):
@@ -160,8 +160,16 @@ def findProbesReq(pckt):
 F_bssids = []    # Found BSSIDs
 F = Falcon();
 
+def LaunchFalcon():
+    thread = threading.Thread(target=hopper, args=(interface, ), name="hopper")
+    thread.daemon = True
+    thread.start()
+
+    sniff(iface=interface, prn=finder)
 
 
+
+"""
 if __name__ == "__main__":
 
     thread = threading.Thread(target=hopper, args=(interface, ), name="hopper")
@@ -169,3 +177,4 @@ if __name__ == "__main__":
     thread.start()
 
     sniff(iface=interface, prn=finder)
+"""

@@ -2,6 +2,10 @@
 import socket
 import sys
 import threading
+from Falcon.flc import *
+import time
+import datetime
+import random
 
 buffer = {"in":"", "out":""}
 requests = [] # request struct : {req_id: request value}
@@ -18,64 +22,94 @@ class ClientThread(threading.Thread):
         self.clientsocket = clientsocket
         print("[+] Nouveau thread pour %s %s" % (self.ip, self.port, ))
 
-    def run(self): 
-   
+    def run(self):
+
         print("Connexion de %s %s" % (self.ip, self.port, ))
         try:
     	# Receive the data in small chunks and retransmit it
-            while True:
+            req_id = None
+            while not req_id: #waiting for the complete request 
                 data = self.clientsocket.recv(2048)
                 print("received "+str(data)+"'")
                 if data:
-                    receive(data)
+                    req_id = self.receive(data)
                     print("sending data back to the client")
                     self.clientsocket.sendall(data)
                 else:
                     print("No more data")
                     break
+            while True: ## Waiting for the response
+                response = "We are holding your request"
+                print(requests)
+                self.clientsocket.sendall(response.encode('utf-8'))
+                time.sleep(10);
+
         finally:
             # Clean up the connection
-            self.clientsocket.close()    
+            self.clientsocket.close()
             print("Client déconnecté...")
-            
-def receive(data):
-    for char in str(str(data).encode("utf-8")):
-        if char != req_end_char : buffer["in"] += char
-        else :
-            print("////Requête : "+cleanRequest(str(buffer["in"])))
-            req_id = 15;#ned to be generated with random par , ip part and time part
-            requests.append({req_id:cleanRequest(buffer["in"])})
-            buffer["in"] = ""
-            return req_id
-    return None
-    
-def cleanRequest(request):
-    request = request.replace('\n',"")
-    request = request.replace("  "," ")
-    return request
-    
-    
 
-class ResponderThread(threading.Thread):
+    def receive(self, data):
+        for char in str(str(data).encode("utf-8")):
+            if char != req_end_char : buffer["in"] += char
+            else :
+                request = self.cleanRequest(str(buffer["in"]));
+                print("////Requête : "+request)
+                req_id = self.generateId();#ned to be generated with random par , ip part and time part
+                requests.append({req_id:request})
+                buffer["in"] = ""
+                return req_id
+        return None
 
-    def __init__(self, ip, port, clientsocket):
-        
+    def cleanRequest(self, request):
+        request = request.replace('\n',"")
+        request = request.replace("  "," ")
+        return request
+
+    def generateId(self):#generating a unique id to identify a request
+        dt = str(datetime.datetime.now())
+        id = dt[5:7]+dt[8:10]+dt[11:13]+dt[14:16]+dt[17:19]+dt[20:26]+str(random.randrange(200))
+        id = self.ip+"-"+str(self.port)+"-"+id
+        return id
+
+
+
+
+class FalconThread(threading.Thread): #the devices scanner thread
+
+    def __init__(self):
         threading.Thread.__init__(self)
-        #lauching FALCON thread
+        print("Launching Falcon Scanner")
 
-    def run(self):
+    def run(self): #lancement de falcon
+        LaunchFalcon()
+
+
+
+class RequestHandlerThread(threading.Thread): #request handler
+
+    def __init__(self):
+        threading.Thread.__init__(self)
+
+    def run(self): #traitement du tableau des requêtes et mise de la réponse dans le tableau des reponses
         while True:
-            print("Holding the request :"+request)
-            #request holding here
-            # Falcon
-            
-            #responses.append({req_id, response})
-    
-	   
+            print("Request handler")
+
+            time.sleep(3);
+
+
+
+
 
 tcpsock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 tcpsock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 tcpsock.bind(("",1111))
+
+newthread = FalconThread()
+newthread.start()
+
+newthread = RequestHandlerThread()
+newthread.start()
 
 while True:
     tcpsock.listen(10)
