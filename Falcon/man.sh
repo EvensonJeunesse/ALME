@@ -1,8 +1,8 @@
 #!/bin/bash
 sudo echo "starting..."
-sudo ifconfig wlp5s0 down
-sudo iwconfig wlp5s0 mode managed
-sudo ifconfig wlp5s0 up
+sudo ifconfig $1 down
+sudo iwconfig $1 mode managed
+sudo ifconfig $1 up
 sudo service network-manager start
-sudo iwconfig wlp5s0
-echo "wlp5s0 in managed mode"
+sudo iwconfig $1
+echo $1" in managed mode"

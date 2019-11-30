@@ -6,7 +6,7 @@ import random
 from scapy.all import *
 
 ##### YOU NEED TO CHANGE THIS ######
-interface = "wlp5s0" #pour your  wifi card interface, need to be in monitor mode
+interface = "wlp2s0" #pour your  wifi card interface, need to be in monitor mode
 
 
 
