@@ -4,9 +4,10 @@ import threading
 import os, time
 import random
 from scapy.all import *
+import datetime
 
 ##### YOU NEED TO CHANGE THIS ######
-interface = "wlp2s0" #pour your  wifi card interface, need to be in monitor mode
+interface = "wlx00c0ca980d76" #pour your  wifi card interface, need to be in monitor mode
 
 
 
@@ -20,10 +21,12 @@ class Device: #Represent a device such as a smartphone, computer
         self.mac = mac # device mac address
         self.channel = channel #the channel in witch the device is communicating
         self.know_ssids = know_ssids #store a list of already encontred ssids
-        self.packets = []; #store previous packet received (can be probes or beacons)
+        self.packets = [] #store previous packet received (can be probes or beacons)
         self.packets.append(packet)
         self.signals = [] #store previous signal strength
-        self.nb_signal = 3; #the number of previous signal strength we want to keep
+        self.nb_signal = 3 #the number of previous signal strength we want to keep
+        self.createdAt = datetime.datetime.now()
+        self.updatedAt = self.createdAt
         if signal > -400 :
             self.signals.append(signal)
 
@@ -34,6 +37,7 @@ class Device: #Represent a device such as a smartphone, computer
     def addSignal(self, signal_strenght):
         self.signals.append(signal_strenght)
         if len(self.signals) > 3 : self.signals.pop(0)
+        self.updatedAt = datetime.datetime.now()
 
     def getSignalAverage(self):
         total = 0
@@ -45,9 +49,26 @@ class Device: #Represent a device such as a smartphone, computer
     def addPacket(self, packet):
         self.packets.append(packet)
         if len(self.packets) > self.nb_signal : self.packets.pop(0)
+        self.updatedAt = datetime.datetime.now()
 
     def setChannel(self, channel):
         self.channel = channel
+
+    def isActive(self):
+        limit = datetime.now() - timedelta(hours=0, minutes=15)
+        if self.updatedAt > limit:
+            return True
+        return False
+
+    def getJSON(self, mac=False, channel=False, signal=False, know_ssids=False):
+        result = {};
+        if mac : json["mac"] = self.mac
+        if mac : json["last-seen"] = self.updatedAt.strftime('%Y-%m-%d %H:%M:%s')
+        if channel : json["channel"] = self.channel
+        if signal : json["signal"] = self.getSignalAverage()
+        if know_ssids : json["know-ssids"] = self.know_ssids
+        return result
+
 
 class Network(Device): #Reprensent an Wifi network, it is a special device
     def __init__(self, ssid, mac, channel=-1, signal=-400, packet=None):
