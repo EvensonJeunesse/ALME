@@ -91,7 +91,9 @@ class Falcon: #The user interface to manipulate devices and networks
         self.nb_targets["dev"] += 1
 
     def getDevice(self, mac):
-        return self.devices[mac]
+        if mac in self.devices:
+            return self.devices[mac]
+        return None
 
     def addNetwork(self, network):
         self.known_mac["net"].append(network.mac)
@@ -99,7 +101,9 @@ class Falcon: #The user interface to manipulate devices and networks
         self.nb_targets["net"] += 1
 
     def getNetwork(self, mac):
-        return self.networks[mac]
+        if mac in self.networks:
+            return self.networks[mac]
+        return None
 
     def isUnknown(self, mac, type):
         if type in ["net","dev"]:
@@ -189,6 +193,7 @@ def LaunchFalcon():
     sniff(iface=interface, prn=finder)
 
 
+#LaunchFalcon()
 
 """
 if __name__ == "__main__":

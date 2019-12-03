@@ -26,9 +26,11 @@ class ClientThread(threading.Thread):
         self.ip = ip
         self.port = port
         self.clientsocket = clientsocket
+        self.req_ids = []
         self.errors = [] #errors table
         self.wait = True #the client should wait for a response
-        self.alive = True #if we have to keep waiting for request
+        self.alive = True #if we have to keep alive the connexion
+        self.wannago = False #If the client want to stop sending request
         print("[+] Nouveau thread pour %s %s" % (self.ip, self.port, ))
 
     def run(self):
@@ -38,31 +40,46 @@ class ClientThread(threading.Thread):
             	# Receive the data in small chunks and retransmit it
                 self.waitForRequest()
                 self.waitForResponse()
+                print("--------")
         finally:
             self.closeConnexion()
 
 
     def waitForRequest(self):
-        self.req_id = None
-        while not self.req_id: #waiting for the complete request
-            data = self.clientsocket.recv(2048)
-            if data:
-                print("received "+tostring(data)+"")
-                self.req_id = self.receive(tostring(data)) #filling the buffer util we got a request --> and receive a request id
-            if self.req_id == "exit":
-                self.wait = False
-                self.alive = False
-                break
+        print("client:")
+        print(self.req_ids)
+        data = self.clientsocket.recv(2048)
+        if data:
+            ids = None;
+            print("received "+tostring(data)+"")
+            ids = self.receive(tostring(data)) #filling the buffer util we got a request --> and receive request ids (might be severals)
+            if ids and self.wannago == False:
+                self.req_ids += ids  #add other requests for the client (ids is a list)
+                if "exit" in ids:
+                    self.wannago = True
+                    self.req_ids.remove("exit");
+
 
     def waitForResponse(self):
-        self.clientsocket.sendall("wait respones".encode("utf-8"))
-        while self.wait: ## Waiting for the response
+        #print("wait for response")
+        #self.clientsocket.sendall("wait respones".encode("utf-8"))
+        while len(self.req_ids):
             try:
                 for response in responses: #if there is an response to the request
-                    if self.req_id in response.key() : self.send(response[self.req_id]) #we send back the reponse to the client
-                    break
+                    for id in self.req_ids: #we scan all pending request of the client
+                        if id in response: #if we found a response to a request
+                            print("response to req_id:"+id)
+                            self.send(response[id]) #we send back the reponse to the client
+                            self.wait = False;
+                            del response[id]; #we delete the response object
+                            self.req_ids.remove(id); #we delete the request id because the response has been sent
+                            break
+                time.sleep(1)
             except:
-                time.sleep(2) #wait to second before trying again
+                time.sleep(1) #wait to second before trying again
+        if self.wannago == True:  #si le client veut partir et qu'il n'y a plus de requêtes à traiter
+            self.alive = False;
+        time.sleep(1)
 
     def closeConnexion(self):
         # Clean up the connection
@@ -78,6 +95,8 @@ class ClientThread(threading.Thread):
 
 
     def receive(self, data):
+        req_ids = []
+        id = None;
         for char in data:
             if char != req_end_char : buffer["in"] += char
             else :
@@ -87,10 +106,12 @@ class ClientThread(threading.Thread):
                 if request == "exit": return "exit"
 
                 print("////Requête : "+str(request))
-                req_id = self.generateId();#ned to be generated with random par , ip part and time part
-                requests.append({"id":req_id, "value":self.fromJSON(request)})
+                id = self.generateId() #need to be generated with random par , ip part and time part
+                req_ids.append(id);
+                requests.append({"id":id, "value":self.fromJSON(request)})
                 buffer["in"] = ""
-                return req_id
+
+        if len(req_ids): return req_ids
         return None
 
 
@@ -151,44 +172,52 @@ class RequestHandlerThread(threading.Thread): #request handler
             print("Request handler")
             if len(requests) > 0:
                 d = datetime.datetime.now()
-                response = {"type":None, "date-time": d.strftime(dateFstring), "info": {}, "errors": []}
-                req = {"type":None, "devices":[], "info":None, "time-range":{}}
+                response = {"type":None, "devices":[], "date-time": d.strftime(dateFstring), "info": {}, "errors": []}
+                req = {"type":None, "devices":[], "info":{}, "time-range":{}}
                 errors = []
                 bad = False
                 value = requests[0]["value"]
                 print(requests[0])
 
+                response["type"] = "nope" #by default the response is negative
+
                 if value == None :
                     requests.pop(0)
-                    break
+                else:
+                    if 'type' not in value.keys():
+                        response["errors"].append(self.newError(12,"Request Error: Missing type field"))
+                        bad = True
+                    elif value["type"] not in self.Types:
+                        response["errors"].append(self.newError(13,"Request Error: Wrong request type value"))
+                        bad = True
+
+                    if 'devices' not in value.keys():
+                        response["errors"].append(self.newError(14,"Request Error: Missing devices field"))
+                        bad = True
+                    elif value["devices"][0] == None:
+                        response["errors"].append(self.newError(15,"Request Error: No device identifier has been given"))
+                        bad = True
+
+                    if bad == False: #we can handle the request
+                        #HERE REQUEST
+                        if value["type"] == "here":
+                            for mac in value["devices"]:
+                                print(mac)
+                                device = F.getDevice(mac)
+                                if not device: device = F.getNetwork(mac)
+                                if device : response["devices"].append(device.mac)
+                            if len(response["devices"]): response["type"] = "yep"
+
+                    try :
+                        responses.append({requests[0]["id"]:response})
+                        requests.pop(0)
+                    except:
+                        print("Error while appending the response")
+                        print(responses)
 
 
-                if 'type' not in value.keys():
-                    response["errors"].append(self.newError(12,"Request Error: Missing type field"))
-                    bad = True
-                elif value["type"] not in self.Types:
-                    response["errors"].append(self.newError(13,"Request Error: Wrong request type value"))
-                    bad = True
-
-                if 'devices' not in value.keys():
-                    response["errors"].append(self.newError(14,"Request Error: Missing devices field"))
-                    bad = True
-                elif value["devices"][0] == None:
-                    response["errors"].append(self.newError(15,"Request Error: No device identifier has been given"))
-                    bad = True
-
-
-                if bad :
-                    response["type"]="nope"
-                    #try :
-                    responses.append({requests[0]["id"]:response})
-                    requests.pop(0)
-                    #except:
-                    print("Error while appending the response")
-                    print(responses)
-
-            else:
-                print("No request pending...")
+            #else:
+            #    print("No request pending...")
 
             time.sleep(3);
 
