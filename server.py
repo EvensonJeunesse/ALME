@@ -11,6 +11,7 @@ import json
 buffer = {"in":"", "out":""}
 requests = [] # request struct : {req_id: request value}
 responses = [] # response struct : {req_id, response value}
+waitlist = []
 req_end_char = "&" #caratère de fin de requête
 dateFstring = '%Y-%m-%d %H:%M:%s'
 
@@ -166,17 +167,26 @@ class RequestHandlerThread(threading.Thread): #request handler
     def __init__(self):
         threading.Thread.__init__(self)
         self.Types = ["wait", "here", "get"]
+        self.dtime = None #the current datetime
+        self.request = None #the current request
 
     def run(self): #traitement du tableau des requêtes et mise de la réponse dans le tableau des reponses
         while True:
             print("Request handler")
             if len(requests) > 0:
-                d = datetime.datetime.now()
-                response = {"type":None, "devices":[], "date-time": d.strftime(dateFstring), "info": {}, "errors": []}
-                req = {"type":None, "devices":[], "info":{}, "time-range":{}}
                 errors = []
                 bad = False
-                value = requests[0]["value"]
+                respond = True
+                self.dtime = datetime.datetime.now()
+                self.request = requests[0]
+                value = self.request["value"]
+                req_id = ""
+                if 'req-id' in value.keys():
+                    req_id = value["req-id"]
+
+                response = {"type":None, "rep-id":requests[0]["id"], "req-id":req_id, "devices":[], "date-time": self.dtime.strftime(dateFstring), "info": {}, "errors": []}
+                #req = {"type":None, "devices":[], "info":{}, "time-range":{}}
+
                 print(requests[0])
 
                 response["type"] = "nope" #by default the response is negative
@@ -201,19 +211,27 @@ class RequestHandlerThread(threading.Thread): #request handler
                     if bad == False: #we can handle the request
                         #HERE REQUEST
                         if value["type"] == "here":
-                            for mac in value["devices"]:
-                                print(mac)
-                                device = F.getDevice(mac)
-                                if not device: device = F.getNetwork(mac)
-                                if device : response["devices"].append(device.mac)
-                            if len(response["devices"]): response["type"] = "yep"
+                            self.here(value, response)
 
-                    try :
-                        responses.append({requests[0]["id"]:response})
-                        requests.pop(0)
-                    except:
-                        print("Error while appending the response")
-                        print(responses)
+                        #GET REQUEST
+                        if value["type"] == "get":
+                            self.get(value, response)
+
+                        #WAIT Request
+                        if value["type"] == "wait":
+                            if not self.wait(value, response) :
+                                requests.append(self.request) #if we weren't able to find a devices and not out of time-range, we put the request in the queue
+                                respond = False #dont respond to that request
+
+                    else: response["type"] = "error"
+
+                    if respond == True:
+                        try :
+                            responses.append({requests[0]["id"]:response})
+                            requests.pop(0)
+                        except:
+                            print("Error while appending the response")
+                            print(responses)
 
 
             #else:
@@ -223,6 +241,53 @@ class RequestHandlerThread(threading.Thread): #request handler
 
     def newError(self,code, details):
         return {"code":code, "details": details}
+
+    def toDate(self, date_time_str):
+        return datetime.datetime.strptime(date_time_str, '%Y-%m-%d %H:%M:%S')
+
+    def get(self, request, response):
+        mac = request["devices"][0]
+        print(mac)
+        device = F.getDevice(mac)
+        if not device: device = F.getNetwork(mac)
+        if device :
+            response["devices"].append(mac)
+            response["info"]["device"] = device.getJSON(mac=True, channel=True, signal=True, know_ssids=True)
+            response["type"] = "yep"
+
+    def here(self, request, response):
+        macs = request["devices"]
+        for mac in macs:
+            print(mac)
+            device = F.getDevice(mac)
+            if not device: device = F.getNetwork(mac)
+            if device : response["devices"].append(device.mac)
+        if len(response["devices"]): response["type"] = "yep"
+
+    def wait(self, request, response):
+        macs = request["devices"]
+        time_range = request["time-range"]
+        start = self.toDate(time_range[0])
+        end = self.toDate(time_range[1])
+        print(start)
+        print(end )
+        if start < self.dtime and self.dtime < end:
+            devices = []
+            for mac in macs:
+                print(mac)
+                device = F.getDevice(mac)
+                if not device : device =  F.getNetwork(mac) #si on a pas trouvé dans les devices on cherche dans les hotspots
+                if device and device.isActive():
+                    response["devices"].append(device.mac)
+                    devices.append(device)
+            if len(response["devices"]): response["type"] = "yep"
+            else : return False
+        else:
+            response["type"] = "error"
+            response["errors"].append(self.newError(18,"Request Error: Out of the time range"))
+        return True
+
+
 
 
 

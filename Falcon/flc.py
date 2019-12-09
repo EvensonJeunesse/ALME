@@ -55,18 +55,18 @@ class Device: #Represent a device such as a smartphone, computer
         self.channel = channel
 
     def isActive(self):
-        limit = datetime.now() - timedelta(hours=0, minutes=15)
+        limit = datetime.datetime.now() - datetime.timedelta(hours=0, minutes=15)
         if self.updatedAt > limit:
             return True
         return False
 
     def getJSON(self, mac=False, channel=False, signal=False, know_ssids=False):
         result = {};
-        if mac : json["mac"] = self.mac
-        if mac : json["last-seen"] = self.updatedAt.strftime('%Y-%m-%d %H:%M:%s')
-        if channel : json["channel"] = self.channel
-        if signal : json["signal"] = self.getSignalAverage()
-        if know_ssids : json["know-ssids"] = self.know_ssids
+        if mac : result["mac"] = self.mac
+        if mac : result["last-seen"] = self.updatedAt.strftime('%Y-%m-%d %H:%M:%s')
+        if channel : result["channel"] = self.channel
+        if signal : result["signal"] = self.getSignalAverage()
+        if know_ssids : result["know-ssids"] = self.know_ssids
         return result
 
 
@@ -94,6 +94,8 @@ class Falcon: #The user interface to manipulate devices and networks
         if mac in self.devices:
             return self.devices[mac]
         return None
+
+
 
     def addNetwork(self, network):
         self.known_mac["net"].append(network.mac)

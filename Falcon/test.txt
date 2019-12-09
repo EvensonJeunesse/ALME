@@ -1,0 +1,3 @@
+{"type":"here", "devices":["2c:fd:a1:9d:ec:c9"]}&
+{"type":"get", "devices":["2c:fd:a1:9d:ec:c9"]}&
+{"type":"wait", "devices":["2c:fd:a1:9d:ec:c9"], "time-range":["2019-12-9 19:05:00","2019-12-9 19:50:00"]}&
