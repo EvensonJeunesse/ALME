@@ -1,3 +1,6 @@
-{"type":"here", "devices":["2c:fd:a1:9d:ec:c9"]}&
+{"type":"here", req-id="test", "devices":["2c:fd:a1:9d:ec:c9"]}&
+{"type":"here", req-id="test", "devices":["e4:70:b8:ce:3e:e3", "2c:fd:a1:9d:ec:c9", "74:df:bf:1b:ea:cc"]}&
+{"type":"here", req-id="test", "devices":["*"]}&
+
 {"type":"get", "devices":["2c:fd:a1:9d:ec:c9"]}&
-{"type":"wait", "devices":["2c:fd:a1:9d:ec:c9"], "time-range":["2019-12-9 19:05:00","2019-12-9 19:50:00"]}&
+{"type":"wait", "req-id":"test", "devices":["2c:fd:a1:9d:ec:c9"], "time-range":["2019-12-9 19:05:00","2019-12-12 19:50:00"]}&

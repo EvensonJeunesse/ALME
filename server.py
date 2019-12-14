@@ -69,18 +69,19 @@ class ClientThread(threading.Thread):
                 for response in responses: #if there is an response to the request
                     for id in self.req_ids: #we scan all pending request of the client
                         if id in response: #if we found a response to a request
-                            print("response to req_id:"+id)
+                            #print("response to req_id:"+id)
                             self.send(response[id]) #we send back the reponse to the client
                             self.wait = False;
                             del response[id]; #we delete the response object
                             self.req_ids.remove(id); #we delete the request id because the response has been sent
                             break
-                time.sleep(1)
+                #time.sleep(1)
             except:
-                time.sleep(1) #wait to second before trying again
+                #time.sleep(1) #wait to second before trying again
+                self.alive = True;
         if self.wannago == True:  #si le client veut partir et qu'il n'y a plus de requêtes à traiter
             self.alive = False;
-        time.sleep(1)
+        #time.sleep(1)
 
     def closeConnexion(self):
         # Clean up the connection
@@ -91,7 +92,7 @@ class ClientThread(threading.Thread):
     def abortRequest(self):
         self.wait = False
         d = datetime.datetime.now()
-        response = {"type":"nope", "date-time": d.strftime(dateFstring), "errors":self.errors}
+        response = {"type":"error", "date-time": d.strftime(dateFstring), "errors":self.errors}
         self.send(response)
 
 
@@ -106,7 +107,7 @@ class ClientThread(threading.Thread):
 
                 if request == "exit": return "exit"
 
-                print("////Requête : "+str(request))
+                #print("////Requête : "+str(request))
                 id = self.generateId() #need to be generated with random par , ip part and time part
                 req_ids.append(id);
                 requests.append({"id":id, "value":self.fromJSON(request)})
@@ -146,7 +147,7 @@ class ClientThread(threading.Thread):
             try:
                 return str(object)
             except:
-                return '{"type":"nope", "errors":[{"code":1, "details":"Not able to return the response"}]}'
+                return '{"type":"error", "errors":[{"code":1, "details":"Not able to return the response"}]}'
 
 
 
@@ -172,7 +173,7 @@ class RequestHandlerThread(threading.Thread): #request handler
 
     def run(self): #traitement du tableau des requêtes et mise de la réponse dans le tableau des reponses
         while True:
-            print("Request handler")
+            #print("Request handler")
             if len(requests) > 0:
                 errors = []
                 bad = False
@@ -185,9 +186,7 @@ class RequestHandlerThread(threading.Thread): #request handler
                     req_id = value["req-id"]
 
                 response = {"type":None, "rep-id":requests[0]["id"], "req-id":req_id, "devices":[], "date-time": self.dtime.strftime(dateFstring), "info": {}, "errors": []}
-                #req = {"type":None, "devices":[], "info":{}, "time-range":{}}
-
-                print(requests[0])
+                #print(requests[0])
 
                 response["type"] = "nope" #by default the response is negative
 
@@ -206,6 +205,9 @@ class RequestHandlerThread(threading.Thread): #request handler
                         bad = True
                     elif value["devices"][0] == None:
                         response["errors"].append(self.newError(15,"Request Error: No device identifier has been given"))
+                        bad = True
+                    if len(req_id) > 128:
+                        response["errors"].append(self.newError(16,"Request Error: too long Request ID"))
                         bad = True
 
                     if bad == False: #we can handle the request
@@ -231,13 +233,12 @@ class RequestHandlerThread(threading.Thread): #request handler
                             requests.pop(0)
                         except:
                             print("Error while appending the response")
-                            print(responses)
-
+                            #print(responses)
 
             #else:
-            #    print("No request pending...")
+                #print("No request pending...")
 
-            time.sleep(3);
+            #time.sleep(1);
 
     def newError(self,code, details):
         return {"code":code, "details": details}
@@ -255,14 +256,23 @@ class RequestHandlerThread(threading.Thread): #request handler
             response["info"]["device"] = device.getJSON(mac=True, channel=True, signal=True, know_ssids=True)
             response["type"] = "yep"
 
+
     def here(self, request, response):
         macs = request["devices"]
-        for mac in macs:
-            print(mac)
-            device = F.getDevice(mac)
-            if not device: device = F.getNetwork(mac)
-            if device : response["devices"].append(device.mac)
+        if macs == ["*"]:
+            response["devices"] = ["*"]
+            response["info"]["net-quantity"] = F.getNetworksQuantity()
+            response["info"]["dev-quantity"] = F.getDevicesQuantity()
+            response["info"]["total-quantity"] = F.getQuantity()
+        else:
+            for mac in macs:
+                print(mac)
+                device = F.getDevice(mac)
+                if not device: device = F.getNetwork(mac)
+                if device : response["devices"].append(device.mac)
         if len(response["devices"]): response["type"] = "yep"
+        else : response["errors"].append(self.newError(17,"Request Error: No devices found, check the devices identifiers"))
+
 
     def wait(self, request, response):
         macs = request["devices"]
@@ -304,7 +314,7 @@ newthread.start()
 
 while True:
     tcpsock.listen(10)
-    print( "En écoute...")
+    #print( "En écoute...")
     (clientsocket, (ip, port)) = tcpsock.accept()
     newthread = ClientThread(ip, port, clientsocket)
     newthread.start()
