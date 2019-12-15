@@ -8,11 +8,25 @@ import datetime
 import random
 import json
 
-buffer = {"in":"", "out":""}
+
+interface = "wlan0"
+port = 1111
+
+
+if len(sys.argv) > 2 and str(sys.argv[1]) in ("-i","-I","--interface") :
+    interface = str(sys.argv[2])
+
+if len(sys.argv) > 4 and str(sys.argv[3]) in ("-p", "-P", "--port"):
+    try:
+        port = int(sys.argv[4])
+    except:
+        print("Error in the port number")
+
+
 requests = [] # request struct : {req_id: request value}
 responses = [] # response struct : {req_id, response value}
 waitlist = []
-req_end_char = "&" #caratère de fin de requête
+req_end_char = ";" #caratère de fin de requête
 dateFstring = '%Y-%m-%d %H:%M:%s'
 
 def tostring(data):
@@ -32,10 +46,11 @@ class ClientThread(threading.Thread):
         self.wait = True #the client should wait for a response
         self.alive = True #if we have to keep alive the connexion
         self.wannago = False #If the client want to stop sending request
-        print("[+] Nouveau thread pour %s %s" % (self.ip, self.port, ))
+        self.buffer = ""
+        print("[+] New thread on port %s" % ( self.port, ))
 
     def run(self):
-        print("Connexion de %s %s" % (self.ip, self.port, ))
+        print("New client connected on %s:%s" % (self.ip, self.port, ))
         try:
             while self.alive:
             	# Receive the data in small chunks and retransmit it
@@ -47,9 +62,15 @@ class ClientThread(threading.Thread):
 
 
     def waitForRequest(self):
-        print("client:")
-        print(self.req_ids)
-        data = self.clientsocket.recv(2048)
+        print("client "+str(clientsocket.fileno())+":")
+        #print(self.req_ids)
+        data = None
+        try:
+            data = self.clientsocket.recv(2048)
+        except:
+            self.alive = False
+
+
         if data:
             ids = None;
             print("received "+tostring(data)+"")
@@ -57,21 +78,26 @@ class ClientThread(threading.Thread):
             if ids and self.wannago == False:
                 self.req_ids += ids  #add other requests for the client (ids is a list)
                 if "exit" in ids:
+                    print("exit request reveived")
                     self.wannago = True
                     self.req_ids.remove("exit");
+                    #print(self.req_ids)
+        else:  self.alive = False
+
 
 
     def waitForResponse(self):
         #print("wait for response")
         #self.clientsocket.sendall("wait respones".encode("utf-8"))
         while len(self.req_ids):
+            #print("wait for response")
+            #print(self.req_ids)
             try:
                 for response in responses: #if there is an response to the request
                     for id in self.req_ids: #we scan all pending request of the client
                         if id in response: #if we found a response to a request
-                            #print("response to req_id:"+id)
+                            print("responding to req_id:"+id)
                             self.send(response[id]) #we send back the reponse to the client
-                            self.wait = False;
                             del response[id]; #we delete the response object
                             self.req_ids.remove(id); #we delete the request id because the response has been sent
                             break
@@ -79,39 +105,43 @@ class ClientThread(threading.Thread):
             except:
                 #time.sleep(1) #wait to second before trying again
                 self.alive = True;
-        if self.wannago == True:  #si le client veut partir et qu'il n'y a plus de requêtes à traiter
+        if self.wannago == True and not len(self.req_ids):  #si le client veut partir et qu'il n'y a plus de requêtes à traiter
             self.alive = False;
         #time.sleep(1)
 
     def closeConnexion(self):
         # Clean up the connection
         self.clientsocket.close()
-        print("Client déconnecté...")
+        print("Client disconnected...")
 
 
     def abortRequest(self):
-        self.wait = False
         d = datetime.datetime.now()
         response = {"type":"error", "date-time": d.strftime(dateFstring), "errors":self.errors}
         self.send(response)
 
 
     def receive(self, data):
+        #print("Receiving data")
         req_ids = []
         id = None;
         for char in data:
-            if char != req_end_char : buffer["in"] += char
+            if char != req_end_char : self.buffer += char
             else :
-                #request = self.makeJSON(self.cleanRequest(buffer["in"]))
-                request = self.cleanRequest(buffer["in"])
+                request = self.cleanRequest(self.buffer)
 
-                if request == "exit": return "exit"
+                if request == "exit":
+                    req_ids.append("exit")
+                    self.buffer = ""
+                    break
 
                 #print("////Requête : "+str(request))
-                id = self.generateId() #need to be generated with random par , ip part and time part
-                req_ids.append(id);
-                requests.append({"id":id, "value":self.fromJSON(request)})
-                buffer["in"] = ""
+                value = self.fromJSON(request)
+                if value :
+                    id = self.generateId() #need to be generated with random par , ip part and time part
+                    req_ids.append(id);
+                    requests.append({"id":id, "value":value})
+                self.buffer = ""
 
         if len(req_ids): return req_ids
         return None
@@ -134,11 +164,13 @@ class ClientThread(threading.Thread):
 
     def fromJSON(self, string):
         try:
+            print(string)
             return json.loads(string)
         except:
             d = datetime.datetime.now()
             self.errors.append({"code":2, "details":"JSON Error : wrong syntax "});
             self.abortRequest();
+            return None;
 
     def toJSON(self, object):
         try:
@@ -159,7 +191,7 @@ class FalconThread(threading.Thread): #the devices scanner thread
         print("Launching Falcon Scanner")
 
     def run(self): #lancement de falcon
-        LaunchFalcon()
+        LaunchFalcon(interface)
 
 
 
@@ -173,8 +205,9 @@ class RequestHandlerThread(threading.Thread): #request handler
 
     def run(self): #traitement du tableau des requêtes et mise de la réponse dans le tableau des reponses
         while True:
-            #print("Request handler")
+
             if len(requests) > 0:
+                #print("Request handler")
                 errors = []
                 bad = False
                 respond = True
@@ -182,15 +215,16 @@ class RequestHandlerThread(threading.Thread): #request handler
                 self.request = requests[0]
                 value = self.request["value"]
                 req_id = ""
-                if 'req-id' in value.keys():
+                if value and 'req-id' in value.keys():
                     req_id = value["req-id"]
 
+                print("holding "+str(value))
                 response = {"type":None, "rep-id":requests[0]["id"], "req-id":req_id, "devices":[], "date-time": self.dtime.strftime(dateFstring), "info": {}, "errors": []}
                 #print(requests[0])
 
                 response["type"] = "nope" #by default the response is negative
 
-                if value == None :
+                if value == None or len(str(value)) < 10 :
                     requests.pop(0)
                 else:
                     if 'type' not in value.keys():
@@ -211,19 +245,23 @@ class RequestHandlerThread(threading.Thread): #request handler
                         bad = True
 
                     if bad == False: #we can handle the request
+                        try:
                         #HERE REQUEST
-                        if value["type"] == "here":
-                            self.here(value, response)
+                            if value["type"] == "here":
+                                self.here(value, response)
 
-                        #GET REQUEST
-                        if value["type"] == "get":
-                            self.get(value, response)
+                            #GET REQUEST
+                            elif value["type"] == "get":
+                                self.get(value, response)
 
-                        #WAIT Request
-                        if value["type"] == "wait":
-                            if not self.wait(value, response) :
-                                requests.append(self.request) #if we weren't able to find a devices and not out of time-range, we put the request in the queue
-                                respond = False #dont respond to that request
+                            #WAIT Request
+                            elif value["type"] == "wait":
+                                if not self.wait(value, response) :
+                                    requests.append(self.request) #if we weren't able to find a devices and not out of time-range, we put the request in the queue
+                                    respond = False #dont respond to that request
+                        except:
+                            response["errors"].append(self.newError(18,"Server Error: Error while holding the request"))
+                            response["type"] = "error"
 
                     else: response["type"] = "error"
 
@@ -234,6 +272,7 @@ class RequestHandlerThread(threading.Thread): #request handler
                         except:
                             print("Error while appending the response")
                             #print(responses)
+
 
             #else:
                 #print("No request pending...")
@@ -248,30 +287,32 @@ class RequestHandlerThread(threading.Thread): #request handler
 
     def get(self, request, response):
         mac = request["devices"][0]
-        print(mac)
-        device = F.getDevice(mac)
-        if not device: device = F.getNetwork(mac)
-        if device :
-            response["devices"].append(mac)
-            response["info"]["device"] = device.getJSON(mac=True, channel=True, signal=True, know_ssids=True)
-            response["type"] = "yep"
+        if mac == "*":
+            response["devices"] = ["*"]
+            response["info"]["simple-devices"] = F.known_mac["dev"]
+            response["info"]["networks"] = F.known_mac["net"]
+            response = self.putStatistics(response)
+        else:
+            #print(mac)
+            device = F.getDevice(mac)
+            if device :
+                response["devices"].append(mac)
+                response["info"]["device"] = device.getJSON(mac=True, channel=True, signal=True, known_ssids=True)
+                response["type"] = "yep"
 
 
     def here(self, request, response):
         macs = request["devices"]
         if macs == ["*"]:
             response["devices"] = ["*"]
-            response["info"]["net-quantity"] = F.getNetworksQuantity()
-            response["info"]["dev-quantity"] = F.getDevicesQuantity()
-            response["info"]["total-quantity"] = F.getQuantity()
+            response = self.putStatistics(response)
         else:
             for mac in macs:
-                print(mac)
+                #print(mac)
                 device = F.getDevice(mac)
-                if not device: device = F.getNetwork(mac)
                 if device : response["devices"].append(device.mac)
         if len(response["devices"]): response["type"] = "yep"
-        else : response["errors"].append(self.newError(17,"Request Error: No devices found, check the devices identifiers"))
+        else : response["errors"].append(self.newError(17," No devices found, check the devices identifiers"))
 
 
     def wait(self, request, response):
@@ -286,7 +327,6 @@ class RequestHandlerThread(threading.Thread): #request handler
             for mac in macs:
                 print(mac)
                 device = F.getDevice(mac)
-                if not device : device =  F.getNetwork(mac) #si on a pas trouvé dans les devices on cherche dans les hotspots
                 if device and device.isActive():
                     response["devices"].append(device.mac)
                     devices.append(device)
@@ -298,13 +338,20 @@ class RequestHandlerThread(threading.Thread): #request handler
         return True
 
 
-
+    def putStatistics(self,response):
+        response["info"]["net-quantity"] = F.getNetworksQuantity()
+        response["info"]["dev-quantity"] = F.getDevicesQuantity()
+        response["info"]["total-quantity"] = F.getQuantity()
 
 
 
 tcpsock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 tcpsock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-tcpsock.bind(("",1111))
+try:
+    tcpsock.bind(("",port))
+    print("ALME Server started on the port "+str(port))
+except:
+    print("An error occurs while launching on the port "+str(port))
 
 newthread = FalconThread()
 newthread.start()
@@ -314,7 +361,7 @@ newthread.start()
 
 while True:
     tcpsock.listen(10)
-    #print( "En écoute...")
+    print( "Listening ...")
     (clientsocket, (ip, port)) = tcpsock.accept()
     newthread = ClientThread(ip, port, clientsocket)
     newthread.start()

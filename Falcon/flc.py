@@ -8,15 +8,18 @@ from scapy.all import *
 import datetime
 
 ##### YOU NEED TO CHANGE THIS ######
-interface = "wlx00c0ca980d76" #pour your  wifi card interface, need to be in monitor mode
+interface_default = "wlan0"
+if len(sys.argv) > 3 and sys.argv[2] == "-i":
+    interface_default = sys.argv[3] #pour your  wifi card interface, need to be in monitor
+    print("Interface : "+interface_default)
 
 clear = lambda: os.system('clear')
 
 class Device: #Represent a device such as a smartphone, computer
-    def __init__(self, mac, channel=-1, signal=-400, know_ssids=[], packet=None):
+    def __init__(self, mac, channel=-1, signal=-400, known_ssids=[], packet=None):
         self.mac = mac # device mac address
         self.channel = channel #the channel in witch the device is communicating
-        self.know_ssids = know_ssids #store a list of already encontred ssids
+        self.known_ssids = known_ssids #store a list of already encontred ssids
         self.packets = [] #store previous packet received (can be probes or beacons)
         self.packets.append(packet)
         self.signals = [] #store previous signal strength
@@ -25,10 +28,14 @@ class Device: #Represent a device such as a smartphone, computer
         self.updatedAt = self.createdAt
         if signal > -400 :
             self.signals.append(signal)
+        self.ssid = None #for network ssid if the device is a network
 
     def info(self):
-        print(str(self.channel)+" > "+self.mac+"("+str(self.getSignalAverage())+")")
+        print(str(self.channel)+" > "+self.mac+"("+str(self.getSignalAverage())+")"+str(self.ssid)+"--"+str(self.known_ssids))
         #print(self.signals)
+
+    def isNetwork(self,ssid):
+        if(ssid) : self.ssid = ssid;
 
     def addSignal(self, signal_strenght):
         self.signals.append(signal_strenght)
@@ -39,7 +46,7 @@ class Device: #Represent a device such as a smartphone, computer
         total = 0
         size = len(self.signals)
         for sig in range(0, size) :
-            total += self.signals[sig]
+            if self.signals[sig] : total += self.signals[sig]
         return total/size
 
     def addPacket(self, packet):
@@ -47,9 +54,9 @@ class Device: #Represent a device such as a smartphone, computer
         if len(self.packets) > self.nb_signal : self.packets.pop(0)
         self.updatedAt = datetime.datetime.now()
 
-    def addKnowSSID(self, ssid):
-        if ssid and ssid not in self.know_ssids:
-            self.know_ssids.append(ssid)
+    def addknownSSID(self, ssid):
+        if ssid and ssid not in self.known_ssids:
+            self.known_ssids.append(ssid)
 
     def setChannel(self, channel):
         self.channel = channel
@@ -60,66 +67,54 @@ class Device: #Represent a device such as a smartphone, computer
             return True
         return False
 
-    def getJSON(self, mac=False, channel=False, signal=False, know_ssids=False):
+    def getJSON(self, mac=False, channel=False, signal=False, known_ssids=False):
         result = {};
         if mac : result["mac"] = self.mac
         result["last-seen"] = self.updatedAt.strftime('%Y-%m-%d %H:%M:%s')
         if channel : result["channel"] = self.channel
         if signal : result["signal"] = self.getSignalAverage()
-        if know_ssids : result["know-ssids"] = self.know_ssids
+        if known_ssids : result["know-ssids"] = self.known_ssids
         return result
 
 
-class Network(Device): #Reprensent an Wifi network, it is a special device
-    def __init__(self, ssid, mac, channel=-1, signal=-400, packet=None):
-        super().__init__(mac, channel, signal)
-        self.ssid = ssid
-
-    def info(self):
-        print(str(self.channel)+" > "+self.mac+"("+str(self.getSignalAverage())+")"+str(self.ssid))
-
-class Falcon: #The user interface to manipulate devices and networks
+class Falcon: #The user interface to manipulate devices and devices
     def __init__(self):
         self.devices = {}
-        self.networks = {}
         self.known_mac = {"net":[], "dev":[]}
         self.nb_targets = {"net":0, "dev":0}
 
     def addDevice(self, device):
-        self.known_mac["dev"].append(device.mac)
+        type = "dev"
+        if device.ssid : type = "net"
+        self.known_mac[type].append(device.mac)
         self.devices[device.mac] = device
-        self.nb_targets["dev"] += 1
+        self.nb_targets[type] += 1
+
+    def thisMacIsNetwork(self,mac):
+        if mac in self.known_mac["dev"] : self.known_mac["dev"].remove(mac)
+        if mac not in self.known_mac["net"] : self.known_mac["net"].append(mac)
+
 
     def getDevice(self, mac):
         try:
-            if mac in self.devices:
+            if mac in self.known_mac["dev"] or mac in self.known_mac["net"]:
                 return self.devices[mac]
         except:
             return None
 
-    def getDevicesQuantity(): return len(self.devices);
+    def getDevicesQuantity(self): return len(self.known_mac["dev"]) #return the number of devices excluding network devices
+
+    def getNetworksQuantity(self): return len(self.known_mac["net"]) #return the number of devices detected
+
+    def getQuantity(self): return len(self.devices); #return the number of devices detected
 
 
-    def addNetwork(self, network):
-        self.known_mac["net"].append(network.mac)
-        self.networks[network.mac] = network
-        self.nb_targets["net"] += 1
-
-    def getNetwork(self, mac):
-        try:
-            if mac in self.networks:
-                return self.networks[mac]
-        except:
-            return None
-
-    def getNetworksQuantity(): return len(self.networks);
-
-    def getQuantity(): return len(self.networks)+len(self.devices);
-
-
-    def isUnknown(self, mac, type):
-        if type in ["net","dev"]:
-            if mac not in self.known_mac[type]:
+    def isUnknown(self, mac, type="all"):
+        if type in ["net","dev","all"]:
+            if type == "all" :
+                if mac not in self.known_mac["net"] and mac not in self.known_mac["dev"]:
+                    return 1
+            elif mac not in self.known_mac[type]:
                 return 1
             return 0
         return 0
@@ -128,16 +123,16 @@ class Falcon: #The user interface to manipulate devices and networks
         clear()
 
         print("-"*20)
-        print("Devices - "+str(len(self.devices)))
+        print("Devices - "+str(len( self.known_mac["dev"])))
 
-        for dev in self.devices:
-            self.devices[dev].info()
+        for mac in self.known_mac["dev"]:
+            self.devices[mac].info()
 
         print("-"*20)
-        print("Networks - "+str(len(self.networks)))
+        print("Networks - "+str(len(self.known_mac["net"])))
 
-        for net in self.networks:
-            self.networks[net].info()
+        for mac in self.known_mac["net"]:
+            self.devices[mac].info()
 
 
 
@@ -152,40 +147,65 @@ def hopper(iface): #sniffing network channels
         if dig != 0 and dig != n:
             n = dig
 
-def finder(pckt):
-    findProbesReq(pckt)
-    findBeacons(pckt)
-    if len(sys.argv) > 2 and str(sys.argv[2]) == "-v":
+def finder(pckt): #look for packets
+    #findProbesReq(pckt)
+    #findBeacons(pckt)
+    findDevices(pckt)
+    if "-v" in sys.argv:
         F.generateUI()
 
-
-def findBeacons(pckt):
+"""
+def findBeacons(pckt): #look for beacons and probes response to find devices
     if pckt.haslayer(Dot11Beacon) or pckt.haslayer(Dot11ProbeResp):
         mac_source =  pckt.getlayer(Dot11).addr2
         addElement(pckt, mac_source,"net")
 
 
-def findProbesReq(pckt):
+def findProbesReq(pckt): #look for probes request to find devices
     if pckt.haslayer(Dot11ProbeReq):
         mac_source = pckt.addr2
         addElement(pckt, mac_source,"dev")
+"""
+def findDevices(pckt):
+    #pckt.show()
+    if pckt.haslayer(Dot11Beacon) or pckt.haslayer(Dot11ProbeResp):
+        mac_source =  pckt.getlayer(Dot11).addr2
+        addElement(pckt, mac_source,"net")
+    #if pckt.haslayer(Dot11ProbeReq):
+    else : #we are supposing by default that others request come from classic devices and not networks
+        #if not pckt.haslayer(Dot11ProbeReq):
+            #pckt.show()
+            #print(pckt.addr2)
+        #mac_source = pckt.addr2
+        if(pckt.addr2) : addElement(pckt, pckt.addr2,"dev")
+        if(pckt.addr3) : addElement(pckt, pckt.addr3,"dev")
 
 
-def addElement(pckt, mac_source, type="dev"):
+
+def addElement(pckt, mac_source, type="dev"): #add device to the falcon database
     signal_source = pckt.dBm_AntSignal
-    if F.isUnknown(mac_source, type):
-        ssid = pckt.getlayer(Dot11Elt).info
-        dev = None;
-        if type=="net" : F.addNetwork(Network(ssid=ssid,mac=mac_source, signal=signal_source, packet=pckt, channel=pckt[RadioTap].Channel))
-        else : F.addDevice(Device(mac=pckt.addr2, signal=signal_source, packet=pckt, channel=pckt[RadioTap].Channel, know_ssids=[ssid]))
+    ssid = None;
+    if F.isUnknown(mac_source):
+        if not signal_source : signal_source = -300
+        knownSSID = []
+        if ssid : knownSSID = [ssid]
+        dev = Device(mac=mac_source, signal=signal_source, packet=pckt, channel=pckt[RadioTap].Channel, known_ssids=knownSSID)
+        if pckt.getlayer(Dot11Elt) :
+            ssid = pckt.getlayer(Dot11Elt).info
+            if type == "net" :
+                dev.isNetwork(ssid)
+        F.addDevice(dev)
     else:
-        if type=="net" : dev = F.getNetwork(mac_source)
-        else : dev = F.getDevice(mac_source)
+        dev = F.getDevice(mac_source)
         dev.addSignal(signal_source)
         dev.addPacket(pckt)
         dev.setChannel(pckt[RadioTap].Channel)
-        ssid = pckt.getlayer(Dot11Elt).info
-        dev.addKnowSSID(ssid)
+        if pckt.getlayer(Dot11Elt): #if it's not a network
+             ssid = pckt.getlayer(Dot11Elt).info
+             dev.addknownSSID(ssid)
+             if type == "net" and F.isUnknown(mac_source, "net") and ssid :
+                 dev.isNetwork(ssid)
+                 F.thisMacIsNetwork(mac_source) # we tell to falcon that we made a mistake, atcually it was a network and not a classic device
 
 """
 def findSSIDfromProbe(pckt):
@@ -203,7 +223,7 @@ def findSSIDfromProbe(pckt):
 F_bssids = []    # Found BSSIDs
 F = Falcon();
 
-def LaunchFalcon():
+def LaunchFalcon(interface):
     thread = threading.Thread(target=hopper, args=(interface, ), name="hopper")
     thread.daemon = True
     thread.start()
@@ -211,4 +231,4 @@ def LaunchFalcon():
     sniff(iface=interface, prn=finder)
 
 if len(sys.argv) > 1 and str(sys.argv[1]) == "-l":
-    LaunchFalcon()
+    LaunchFalcon(interface_default)
