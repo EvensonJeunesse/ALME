@@ -1,4 +1,5 @@
 {"type":"here", "req-id":"test","devices":["ac:fb:b1:ad:eb:b3"]};exit;
+{"type":"here", "devices":["*"]};
 
 {"type":"here", "req-id":"test","devices":["2c:fd:a1:9d:ec:c9"]};exit;
 
@@ -9,3 +10,8 @@
 {"type":"get", "devices":["*"]};
 
 {"type":"wait", "req-id":"test", "devices":["2c:fd:a1:9d:ec:c9"], "time-range":["2019-12-9 19:05:00","2019-12-12 19:50:00"]};
+
+
+Error testing :
+
+{"type":"here", "devices":["adasd"]};

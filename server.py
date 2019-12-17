@@ -111,6 +111,7 @@ class ClientThread(threading.Thread):
 
     def closeConnexion(self):
         # Clean up the connection
+        self.clientsocket.sendall("\r\n".encode('utf-8'))
         self.clientsocket.close()
         print("Client disconnected...")
 
@@ -260,8 +261,10 @@ class RequestHandlerThread(threading.Thread): #request handler
                                     requests.append(self.request) #if we weren't able to find a devices and not out of time-range, we put the request in the queue
                                     respond = False #dont respond to that request
                         except:
-                            response["errors"].append(self.newError(18,"Server Error: Error while holding the request"))
+                            response["errors"].append(self.newError(19,"Server Error: Error while holding the request"))
                             response["type"] = "error"
+                            print("Error Handling the request : "+requests[0]["id"])
+                            print(sys.exc_info()[0])
 
                     else: response["type"] = "error"
 
@@ -303,6 +306,7 @@ class RequestHandlerThread(threading.Thread): #request handler
 
     def here(self, request, response):
         macs = request["devices"]
+        response["devices"] = []
         if macs == ["*"]:
             response["devices"] = ["*"]
             response = self.putStatistics(response)
@@ -342,6 +346,7 @@ class RequestHandlerThread(threading.Thread): #request handler
         response["info"]["net-quantity"] = F.getNetworksQuantity()
         response["info"]["dev-quantity"] = F.getDevicesQuantity()
         response["info"]["total-quantity"] = F.getQuantity()
+        return response
 
 
 
