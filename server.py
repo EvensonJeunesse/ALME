@@ -96,7 +96,7 @@ class ClientThread(threading.Thread):
                 for response in responses: #if there is an response to the request
                     for id in self.req_ids: #we scan all pending request of the client
                         if id in response: #if we found a response to a request
-                            print("responding to req_id:"+id)
+                            print("responding to "+id)
                             self.send(response[id]) #we send back the reponse to the client
                             del response[id]; #we delete the response object
                             self.req_ids.remove(id); #we delete the request id because the response has been sent
@@ -175,12 +175,12 @@ class ClientThread(threading.Thread):
 
     def toJSON(self, object):
         try:
-            return json.dumps(object)
+            return json.dumps(object)+";"
         except:
             try:
-                return str(object)
+                return str(object)+";"
             except:
-                return '{"type":"error", "errors":[{"code":1, "details":"Not able to return the response"}]}'
+                return '{"type":"error", "errors":[{"code":1, "details":"Not able to return the response"}]}'+";"
 
 
 
@@ -216,11 +216,11 @@ class RequestHandlerThread(threading.Thread): #request handler
                 self.request = requests[0]
                 value = self.request["value"]
                 req_id = ""
-                if value and 'req-id' in value.keys():
-                    req_id = value["req-id"]
+                if value and 'reqid' in value.keys():
+                    req_id = value["reqid"]
 
                 print("holding "+str(value))
-                response = {"type":None, "rep-id":requests[0]["id"], "req-id":req_id, "devices":[], "date-time": self.dtime.strftime(dateFstring), "info": {}, "errors": []}
+                response = {"type":None, "repid":requests[0]["id"], "reqid":req_id, "devices":[], "date-time": self.dtime.strftime(dateFstring), "info": {}, "errors": []}
                 #print(requests[0])
 
                 response["type"] = "nope" #by default the response is negative
@@ -309,12 +309,12 @@ class RequestHandlerThread(threading.Thread): #request handler
         response["devices"] = []
         if macs == ["*"]:
             response["devices"] = ["*"]
-            response = self.putStatistics(response)
+            response = self.putStatistics(response, active=True)
         else:
             for mac in macs:
                 #print(mac)
                 device = F.getDevice(mac)
-                if device : response["devices"].append(device.mac)
+                if device and device.isActive(): response["devices"].append(device.mac)
         if len(response["devices"]): response["type"] = "yep"
         else : response["errors"].append(self.newError(17," No devices found, check the devices identifiers"))
 
@@ -342,10 +342,10 @@ class RequestHandlerThread(threading.Thread): #request handler
         return True
 
 
-    def putStatistics(self,response):
-        response["info"]["net-quantity"] = F.getNetworksQuantity()
-        response["info"]["dev-quantity"] = F.getDevicesQuantity()
-        response["info"]["total-quantity"] = F.getQuantity()
+    def putStatistics(self,response, active=False):
+        response["info"]["quantity"] = {}
+        response["info"]["quantity"]["networks"] = F.getNetworksQuantity(active)
+        response["info"]["quantity"]["devices"] = F.getDevicesQuantity(active)
         return response
 
 

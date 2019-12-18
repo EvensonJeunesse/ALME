@@ -62,7 +62,7 @@ class Device: #Represent a device such as a smartphone, computer
         self.channel = channel
 
     def isActive(self): #return if a device is active or not (recently updated)
-        limit = datetime.datetime.now() - datetime.timedelta(hours=0, minutes=15)
+        limit = datetime.datetime.now() - datetime.timedelta(hours=0, minutes=5)
         if self.updatedAt > limit:
             return True
         return False
@@ -102,11 +102,28 @@ class Falcon: #The user interface to manipulate devices and devices
         except:
             return None
 
-    def getDevicesQuantity(self): return len(self.known_mac["dev"]) #return the number of devices excluding network devices
+    def getDevicesQuantity(self, active=False):
+        if not active: return len(self.known_mac["dev"]) #return the number of devices excluding network devices
+        else:
+            nb = 0
+            for mac in self.known_mac["dev"]:
+                try:
+                    if self.devices[mac].isActive() : nb = nb + 1
+                except:
+                    self.known_mac["dev"].remove(mac)
+            return nb
 
-    def getNetworksQuantity(self): return len(self.known_mac["net"]) #return the number of devices detected
+    def getNetworksQuantity(self, active):
+        if not active: return len(self.known_mac["net"]) #return the number of devices detected
+        else:
+            nb = 0
+            for mac in self.known_mac["dev"]:
+                try:
+                    if self.devices[mac].isActive() : nb = nb + 1
+                except:
+                    self.known_mac["net"].remove(mac)
+            return nb
 
-    def getQuantity(self): return len(self.devices); #return the number of devices detected
 
 
     def isUnknown(self, mac, type="all"):

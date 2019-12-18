@@ -2,7 +2,7 @@
 
 $ip = "127.0.0.1";
 $port = 1111;
-$req = '{"type":"here", "req-id":"test","devices":["*"]};exit;';
+$req = '{"type":"here", "req-id":"test","devices":["*"]};{"type":"here", "req-id":"test","devices":["2c:fd:a1:9d:ec:c9"]};exit;';
 $req_separator = ";";
 /*
 $fp = fsockopen($ip, $port, $errno, $errstr, 30);
@@ -50,6 +50,7 @@ function GET($host_, $port_, $request_){
 
 $reponses_JSON =  array();
 $result = GET($ip, $port, $req);
+//print($result);
 if(!$result) die("No response receive");
 
 $responses = explode($req_separator, $result);
@@ -67,8 +68,14 @@ foreach ($responses as $response) {
 
 //var_dump($reponse_JSON);
 
- ?>
+$size = $reponse_JSON[0]->info->quantity->devices;
+$evenson = false;
 
-<div>
-  <?
-</div>
+if ( $reponse_JSON[1]->type == "yep"){
+  $evenson = true;
+  print("Evenson is here");
+}
+
+//var_dump($reponse_JSON);
+
+ ?>
